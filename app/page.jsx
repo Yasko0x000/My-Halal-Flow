@@ -5,7 +5,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
 import { 
-  Wallet, TrendingUp, Home, Plus, Trash2, Settings, Target, Briefcase, Plane, Smartphone, X, User, ArrowRight, CheckCircle2, Package, RefreshCw, Box, AlertCircle, Pencil, History, ArrowLeft, LayoutDashboard, PieChart, LogOut, ChevronRight, Car, Heart, CalendarCheck, ThumbsUp, Check, CalendarPlus, Calendar
+  Wallet, TrendingUp, Home, Plus, Trash2, Settings, Target, Briefcase, Plane, Smartphone, X, User, ArrowRight, CheckCircle2, Package, RefreshCw, Box, AlertCircle, Pencil, History, ArrowLeft, LayoutDashboard, PieChart, LogOut, ChevronRight, Car, Heart, CalendarCheck, ThumbsUp, Check, CalendarPlus, Calendar, ArrowDown
 } from 'lucide-react';
 
 // --- UTILITAIRES ANIMATIONS & UI ---
@@ -84,7 +84,7 @@ const mockDb = {
   load: () => {
     if (typeof window === 'undefined') return null;
     try {
-        const data = localStorage.getItem('halalFlow_db_v3'); 
+        const data = localStorage.getItem('halalFlow_db_v4'); // V4 pour futureOperations
         return data ? JSON.parse(data) : null;
     } catch (e) {
         console.error("Erreur lecture DB", e);
@@ -94,7 +94,7 @@ const mockDb = {
   save: (data) => {
     if (typeof window === 'undefined') return;
     try {
-        localStorage.setItem('halalFlow_db_v3', JSON.stringify(data));
+        localStorage.setItem('halalFlow_db_v4', JSON.stringify(data));
     } catch (e) {
         console.error("Erreur sauvegarde DB", e);
     }
@@ -127,7 +127,7 @@ export default function MyHalalFlow() {
   const [transactions, setTransactions] = useState([]);
   const [goals, setGoals] = useState([]);
   const [assets, setAssets] = useState([]);
-  const [futureIncomes, setFutureIncomes] = useState([]);
+  const [futureOperations, setFutureOperations] = useState([]); // Renommé pour inclure dépenses
 
   const [editingItem, setEditingItem] = useState(null);
 
@@ -152,9 +152,14 @@ export default function MyHalalFlow() {
         setGoals(loadedGoals);
         const loadedAssets = (data.assets || []).map(a => ({...a, status: a.status || 'active'}));
         setAssets(loadedAssets);
-        // Migration: Assurer que received existe
-        const loadedIncomes = (data.futureIncomes || []).map(i => ({...i, received: i.received || false}));
-        setFutureIncomes(loadedIncomes);
+        // Migration V3 -> V4 (futureIncomes -> futureOperations)
+        let loadedOps = [];
+        if (data.futureOperations) {
+            loadedOps = data.futureOperations;
+        } else if (data.futureIncomes) {
+            loadedOps = data.futureIncomes.map(i => ({...i, type: 'in'})); // Migration ancien format
+        }
+        setFutureOperations(loadedOps.map(i => ({...i, received: i.received || false})));
         
         setOnboarded(true);
 
@@ -173,9 +178,9 @@ export default function MyHalalFlow() {
   // --- PERSISTANCE ---
   useEffect(() => {
     if (!loading && onboarded) {
-      mockDb.save({ user, finance, transactions, goals, assets, futureIncomes });
+      mockDb.save({ user, finance, transactions, goals, assets, futureOperations });
     }
-  }, [user, finance, transactions, goals, assets, futureIncomes, loading, onboarded]);
+  }, [user, finance, transactions, goals, assets, futureOperations, loading, onboarded]);
 
 
   // --- ACTIONS METIERS ---
@@ -217,8 +222,7 @@ export default function MyHalalFlow() {
   };
 
   // --- CORE TRANSACTIONS ---
-  // Ajout du paramètre relatedIncomeId pour la gestion des primes
-  const addTransaction = (type, amount, label, relatedGoalId = null, relatedAssetId = null, relatedIncomeId = null) => {
+  const addTransaction = (type, amount, label, relatedGoalId = null, relatedAssetId = null, relatedOpId = null) => {
     const val = parseFloat(amount);
     if (isNaN(val) || !label) return;
 
@@ -228,9 +232,9 @@ export default function MyHalalFlow() {
         type, 
         amount: val, 
         label,
-        relatedGoalId: relatedGoalId,
-        relatedAssetId: relatedAssetId,
-        relatedIncomeId: relatedIncomeId
+        relatedGoalId,
+        relatedAssetId,
+        relatedOpId
     };
 
     setTransactions(prev => [newTx, ...prev]);
@@ -248,11 +252,11 @@ export default function MyHalalFlow() {
         setAssets(prev => prev.map(a => a.id === relatedAssetId ? { ...a, status: 'sold' } : a));
     }
 
-    if (relatedIncomeId) {
-        setFutureIncomes(prev => prev.map(i => i.id === relatedIncomeId ? { ...i, received: true } : i));
+    if (relatedOpId) {
+        setFutureOperations(prev => prev.map(i => i.id === relatedOpId ? { ...i, received: true } : i));
     }
 
-    showToast((relatedGoalId || relatedAssetId || relatedIncomeId) ? "Opération validée avec succès !" : "Transaction enregistrée");
+    showToast((relatedGoalId || relatedAssetId || relatedOpId) ? "Opération validée avec succès !" : "Transaction enregistrée");
     setCurrentView('dashboard');
   };
 
@@ -276,9 +280,9 @@ export default function MyHalalFlow() {
       } else if (txToDelete.relatedAssetId) {
           setAssets(prev => prev.map(a => a.id === txToDelete.relatedAssetId ? { ...a, status: 'active' } : a));
           showToast("Bien remis en stock (vente annulée) !", "success");
-      } else if (txToDelete.relatedIncomeId) {
-          setFutureIncomes(prev => prev.map(i => i.id === txToDelete.relatedIncomeId ? { ...i, received: false } : i));
-          showToast("Prime réactivée (encaissement annulé) !", "success");
+      } else if (txToDelete.relatedOpId) {
+          setFutureOperations(prev => prev.map(i => i.id === txToDelete.relatedOpId ? { ...i, received: false } : i));
+          showToast("Opération réactivée au planning !", "success");
       } else {
           showToast("Transaction annulée", "error");
       }
@@ -342,30 +346,36 @@ export default function MyHalalFlow() {
       }
   };
 
-  const addFutureIncome = (data) => {
-      setFutureIncomes(prev => [...prev, { id: Date.now(), ...data, amount: parseFloat(data.amount), received: false }]);
-      showToast("Rentrée future planifiée !");
+  // --- ACTIONS FUTURE OPERATIONS ---
+  const addFutureOperation = (data) => {
+      setFutureOperations(prev => [...prev, { id: Date.now(), ...data, amount: parseFloat(data.amount), received: false }]);
+      showToast(data.type === 'in' ? "Rentrée planifiée !" : "Dépense planifiée !");
       setCurrentView('planning');
   };
 
-  const validateFutureIncome = (income) => {
-      const realAmountStr = prompt(`Confirmer la réception de "${income.label}" ?\nMontant réel perçu (€) :`, income.amount);
+  const validateFutureOperation = (op) => {
+      const realAmountStr = prompt(`Confirmer "${op.label}" ?\nMontant réel (€) :`, op.amount);
       if (realAmountStr) {
           const realAmount = parseFloat(realAmountStr);
           if (isNaN(realAmount)) return showToast("Montant invalide", "error");
-          addTransaction('in', realAmount, `Revenu : ${income.label}`, null, null, income.id);
+          
+          // On utilise op.type pour savoir si c'est une entrée ou une sortie
+          const type = op.type || 'in'; 
+          const prefix = type === 'in' ? 'Revenu' : 'Dépense';
+          
+          addTransaction(type, realAmount, `${prefix} : ${op.label}`, null, null, op.id);
       }
   };
 
-  const deleteFutureIncome = (id) => {
-      if(confirm("Supprimer cette rentrée prévue ?")) {
-          setFutureIncomes(prev => prev.filter(i => i.id !== id));
+  const deleteFutureOperation = (id) => {
+      if(confirm("Supprimer cette planification ?")) {
+          setFutureOperations(prev => prev.filter(i => i.id !== id));
       }
   };
 
   const resetAll = () => {
       if(confirm("⚠ ATTENTION : RESET USINE ? Tout sera perdu.")) {
-          localStorage.removeItem('halalFlow_db_v3');
+          localStorage.removeItem('halalFlow_db_v4');
           window.location.reload();
       }
   };
@@ -377,7 +387,7 @@ export default function MyHalalFlow() {
   const netWorth = (Number(finance.balance) || 0) + totalAssets;
   const monthlySavings = (Number(finance.income) || 0) - (Number(finance.expenses) || 0);
 
-  // --- PROJECTION CORRIGÉE ---
+  // --- PROJECTION CORRIGÉE (Avec Dépenses Futures) ---
   const projectionData = useMemo(() => {
     const data = [];
     const months = ["Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc"];
@@ -392,12 +402,18 @@ export default function MyHalalFlow() {
 
         const projDate = new Date(today.getFullYear(), today.getMonth() + i + 1, 1);
         
-        futureIncomes.forEach(inc => {
-            if (inc.received) return; // Si reçu, c'est déjà dans le cash, on ne compte pas double
+        futureOperations.forEach(op => {
+            if (op.received) return; // Déjà validé, donc déjà dans le cash réel
             
-            const incDate = new Date(inc.date);
-            if (incDate.getMonth() === projDate.getMonth() && incDate.getFullYear() === projDate.getFullYear()) {
-                runningPotential += inc.amount; 
+            const opDate = new Date(op.date);
+            if (opDate.getMonth() === projDate.getMonth() && opDate.getFullYear() === projDate.getFullYear()) {
+                const amount = Number(op.amount);
+                // Si c'est une dépense, on soustrait du potentiel
+                if (op.type === 'out') {
+                    runningPotential -= amount;
+                } else {
+                    runningPotential += amount;
+                }
             }
         });
 
@@ -409,7 +425,7 @@ export default function MyHalalFlow() {
         });
     }
     return data;
-  }, [finance.balance, monthlySavings, totalAssets, futureIncomes]);
+  }, [finance.balance, monthlySavings, totalAssets, futureOperations]);
 
   const historyData = useMemo(() => {
       let bal = Number(finance.balance) || 0;
@@ -468,7 +484,7 @@ export default function MyHalalFlow() {
         <nav className="flex-1 space-y-2">
             <NavItem icon={LayoutDashboard} label="Tableau de bord" active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')} />
             <NavItem icon={History} label="Historique" active={currentView === 'history'} onClick={() => setCurrentView('history')} />
-            <NavItem icon={CalendarPlus} label="Planning & Primes" active={currentView === 'planning'} onClick={() => setCurrentView('planning')} />
+            <NavItem icon={CalendarPlus} label="Planning Financier" active={currentView === 'planning'} onClick={() => setCurrentView('planning')} />
             <NavItem icon={Settings} label="Budget & Config" active={currentView === 'settings'} onClick={() => setCurrentView('settings')} />
         </nav>
 
@@ -570,7 +586,7 @@ export default function MyHalalFlow() {
                         <div className="flex justify-between items-end mb-6">
                              <div>
                                 <h3 className="font-bold text-lg text-slate-800">Trajectoire Financière</h3>
-                                <p className="text-sm text-slate-500">Simulation 12 mois (inclut les primes planifiées)</p>
+                                <p className="text-sm text-slate-500">Simulation 12 mois (inclut planning)</p>
                              </div>
                              <div className="flex gap-4 text-xs font-medium">
                                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>Cash Réel</div>
@@ -717,45 +733,47 @@ export default function MyHalalFlow() {
                 <div className="flex justify-between items-center">
                     <div className="flex items-center gap-4">
                         <Button variant="secondary" onClick={() => setCurrentView('dashboard')} className="w-10 h-10 p-0 rounded-full"><ArrowLeft size={20}/></Button>
-                        <h2 className="text-2xl font-bold">Planning & Primes</h2>
+                        <h2 className="text-2xl font-bold">Planning Financier</h2>
                     </div>
-                    <Button onClick={() => setCurrentView('planning_form')}><Plus size={16}/> Planifier une entrée</Button>
+                    <Button onClick={() => setCurrentView('planning_form')}><Plus size={16}/> Planifier</Button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Card className="p-6 bg-blue-50 border-blue-100">
-                        <h3 className="font-bold text-blue-900 mb-2 flex items-center gap-2"><CalendarCheck size={18}/> Fonctionnement</h3>
-                        <p className="text-sm text-blue-700">Ajoute ici tes rentrées d'argent futures connues (13ème mois, primes, ventes sûres...). Elles s'ajouteront automatiquement à la courbe de projection à la date prévue.</p>
+                        <h3 className="font-bold text-blue-900 mb-2 flex items-center gap-2"><CalendarCheck size={18}/> Comment ça marche ?</h3>
+                        <p className="text-sm text-blue-700">Planifie tes rentrées (primes, ventes) et tes grosses dépenses futures. Elles modifient ta courbe de <strong>Potentiel</strong> mais pas ton cash réel tant qu'elles ne sont pas validées.</p>
                     </Card>
                 </div>
 
                 <div className="space-y-3">
-                    {futureIncomes.length === 0 ? <div className="text-center py-10 text-slate-400 italic">Aucune rentrée planifiée.</div> : 
-                        futureIncomes.sort((a,b) => new Date(a.date) - new Date(b.date)).map(inc => (
-                            <Card key={inc.id} className={`p-4 flex justify-between items-center group ${inc.received ? 'bg-slate-50 border-slate-200 opacity-60' : ''}`}>
+                    {futureOperations.length === 0 ? <div className="text-center py-10 text-slate-400 italic">Aucune opération planifiée.</div> : 
+                        futureOperations.sort((a,b) => new Date(a.date) - new Date(b.date)).map(op => (
+                            <Card key={op.id} className={`p-4 flex justify-between items-center group ${op.received ? 'bg-slate-50 border-slate-200 opacity-60' : ''}`}>
                                 <div className="flex items-center gap-4">
-                                    <div className={`${inc.received ? 'bg-slate-200 text-slate-500' : 'bg-emerald-100 text-emerald-600'} p-3 rounded-xl`}>
+                                    <div className={`${op.received ? 'bg-slate-200 text-slate-500' : op.type === 'out' ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'} p-3 rounded-xl`}>
                                         <Calendar size={20}/>
                                     </div>
                                     <div>
-                                        <h4 className={`font-bold ${inc.received ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{inc.label}</h4>
-                                        <p className="text-xs text-slate-500">Prévu pour : {new Date(inc.date).toLocaleDateString('fr-FR', {month: 'long', year: 'numeric'})}</p>
+                                        <h4 className={`font-bold ${op.received ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{op.label}</h4>
+                                        <p className="text-xs text-slate-500">Prévu pour : {new Date(op.date).toLocaleDateString('fr-FR', {month: 'long', year: 'numeric'})}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-4">
-                                    <span className={`font-bold ${inc.received ? 'text-slate-500' : 'text-emerald-600'}`}>+{formatMoney(inc.amount)}</span>
-                                    {inc.received ? (
-                                        <span className="text-[10px] bg-slate-200 text-slate-500 px-2 py-1 rounded-full font-bold">REÇU</span>
+                                    <span className={`font-bold ${op.received ? 'text-slate-500' : op.type === 'out' ? 'text-red-600' : 'text-emerald-600'}`}>
+                                        {op.type === 'out' ? '-' : '+'}{formatMoney(op.amount)}
+                                    </span>
+                                    {op.received ? (
+                                        <span className="text-[10px] bg-slate-200 text-slate-500 px-2 py-1 rounded-full font-bold">VALIDÉ</span>
                                     ) : (
                                         <div className="flex gap-2">
                                             <button 
-                                                onClick={() => validateFutureIncome(inc)}
-                                                className="p-2 bg-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-200"
-                                                title="Valider la réception"
+                                                onClick={() => validateFutureOperation(op)}
+                                                className={`p-2 rounded-lg hover:opacity-80 ${op.type === 'out' ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}
+                                                title="Valider l'opération"
                                             >
                                                 <CheckCircle2 size={16}/>
                                             </button>
-                                            <button onClick={() => deleteFutureIncome(inc.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={16}/></button>
+                                            <button onClick={() => deleteFutureOperation(op.id)} className="text-slate-300 hover:text-red-500 p-2"><Trash2 size={16}/></button>
                                         </div>
                                     )}
                                 </div>
@@ -767,8 +785,8 @@ export default function MyHalalFlow() {
         )}
 
         {currentView === 'planning_form' && (
-            <FormLayout title="Planifier une rentrée" onBack={() => setCurrentView('planning')}>
-                <FutureIncomeForm onSubmit={addFutureIncome} onCancel={() => setCurrentView('planning')} />
+            <FormLayout title="Planifier une opération" onBack={() => setCurrentView('planning')}>
+                <FutureOpForm onSubmit={addFutureOperation} onCancel={() => setCurrentView('planning')} />
             </FormLayout>
         )}
 
@@ -852,9 +870,9 @@ export default function MyHalalFlow() {
                                                 <Package size={10}/> Vente Stock
                                             </span>
                                         )}
-                                        {tx.relatedIncomeId && (
+                                        {tx.relatedOpId && (
                                             <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium flex items-center gap-1">
-                                                <CalendarCheck size={10}/> Prime reçue
+                                                <CalendarCheck size={10}/> Planifié
                                             </span>
                                         )}
                                     </div>
@@ -976,16 +994,23 @@ const TransactionForm = ({ onSubmit, onCancel }) => {
     );
 };
 
-const FutureIncomeForm = ({ onSubmit, onCancel }) => {
-    const [formData, setFormData] = useState({ amount: '', label: '', date: '' });
+const FutureOpForm = ({ onSubmit, onCancel }) => {
+    const [formData, setFormData] = useState({ type: 'in', amount: '', label: '', date: '' });
     return (
         <Card className="p-8 space-y-6">
-            <InputGroup label="Libellé" value={formData.label} onChange={e => setFormData({...formData, label: e.target.value})} placeholder="Ex: Prime d'été, 13ème mois..." />
+            <div className="flex bg-slate-100 p-1 rounded-xl">
+                {['in', 'out'].map(t => (
+                    <button key={t} onClick={() => setFormData({...formData, type: t})} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${formData.type === t ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>
+                        {t === 'in' ? 'Entrée prévue (+)' : 'Sortie prévue (-)'}
+                    </button>
+                ))}
+            </div>
+            <InputGroup label="Libellé" value={formData.label} onChange={e => setFormData({...formData, label: e.target.value})} placeholder={formData.type === 'in' ? "Ex: Prime, Vente..." : "Ex: Impôts, Facture..."} />
             <InputGroup label="Montant Prévu (€)" type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} placeholder="0.00" />
             <InputGroup label="Date prévue" type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
             <div className="flex gap-3 pt-4">
                 <Button variant="secondary" className="flex-1" onClick={onCancel}>Annuler</Button>
-                <Button variant="emerald" className="flex-1" onClick={() => onSubmit(formData)} disabled={!formData.amount || !formData.date}>Planifier</Button>
+                <Button variant={formData.type === 'in' ? 'emerald' : 'primary'} className="flex-1" onClick={() => onSubmit(formData)} disabled={!formData.amount || !formData.date}>Planifier</Button>
             </div>
         </Card>
     );
