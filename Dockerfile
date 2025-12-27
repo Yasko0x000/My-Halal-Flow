@@ -1,5 +1,8 @@
-# Utiliser une image Node.js légère
-FROM node:18-alpine
+# Utiliser une image Node.js légère (Version 20 nécessaire pour Next.js récent)
+FROM node:20-alpine
+
+# Installer la librairie de compatibilité requise pour Next.js
+RUN apk add --no-cache libc6-compat
 
 # Créer le dossier de l'app
 WORKDIR /app
@@ -14,6 +17,7 @@ RUN npm install
 COPY . .
 
 # Construire l'application Next.js
+# Note : Si ESLint bloque, on peut ajouter ENV NEXT_TELEMETRY_DISABLED 1
 RUN npm run build
 
 # Exposer le port 3000
