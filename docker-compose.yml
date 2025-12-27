@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  # 1. Ton Application Next.js
+  app:
+    container_name: halal-flow-app
+    build: .
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      # Attention : Mots de passe en clair pour le Lab (à sécuriser plus tard)
+      DATABASE_URL: mysql://root:monSuperMotDePasse@db:3306/halalflow
+    depends_on:
+      - db
+
+  # 2. La Base de Données (MariaDB)
+  db:
+    image: mariadb:10.11
+    container_name: halal-flow-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: monSuperMotDePasse
+      MYSQL_DATABASE: halalflow
+    volumes:
+      - db_data:/var/lib/mysql
+
+  # 3. Interface PhpMyAdmin (Pour voir la BDD)
+  phpmyadmin:
+    image: phpmyadmin
+    container_name: halal-flow-pma
+    restart: always
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: db
+    depends_on:
+      - db
+
+volumes:
+  db_data:
