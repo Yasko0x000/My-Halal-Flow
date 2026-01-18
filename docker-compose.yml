@@ -13,12 +13,13 @@ services:
       DATABASE_URL: mysql://root:monSuperMotDePasse@db:3306/halalflow
     depends_on:
       - db
-
   # 2. La Base de Données (MariaDB)
   db:
     image: mariadb:10.11
     container_name: halal-flow-db
     restart: always
+    ports:             # <--- AJOUTER ICI
+      - "3306:3306"    # <--- AJOUTER ICI
     environment:
       MYSQL_ROOT_PASSWORD: monSuperMotDePasse
       MYSQL_DATABASE: halalflow

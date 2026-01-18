@@ -1,4 +1,34 @@
-node_modules
-.next
+# Dépendances
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+.coverage
+coverage/
+
+# Next.js
+.next/
+out/
+build/
+
+# Environnement & Secrets (TRES IMPORTANT)
 .env
-.git
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs
+*.log
+
+# Système
+.DS_Store
+*.pem
+
+# Prisma (optionnel, on garde le schema mais pas le client généré s'il est lourd)
+# prisma/migrations (tu peux le garder pour l'historique)

@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+  // Vital pour tourner sur ton serveur Debian ET dans le conteneur Docker
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Config Globale (Solde, Revenus Fixes...)
+model UserSettings {
+  id              Int      @id @default(1)
+  name            String   @default("Utilisateur")
+  balance         Decimal  @default(0) @db.Decimal(10, 2)
+  monthlyIncome   Decimal  @default(0) @db.Decimal(10, 2)
+  monthlyExpenses Decimal  @default(0) @db.Decimal(10, 2)
+  lastBudgetCheck DateTime @default(now())
+}
+
+// Transactions
+model Transaction {
+  id             String   @id @default(cuid())
+  date           DateTime @default(now())
+  amount         Decimal  @db.Decimal(10, 2)
+  type           String   // "in" ou "out"
+  label          String
+
+  // Relations Cycle de Vie
+  relatedGoalId  String?
+  relatedAssetId String?
+  relatedOpId    String?
+
+  createdAt      DateTime @default(now())
+}
+
+// Objectifs (Épargne)
+model Goal {
+  id           String   @id @default(cuid())
+  name         String
+  targetAmount Decimal  @db.Decimal(10, 2)
+  status       String   @default("active")
+  color        String   @default("bg-slate-900")
+  iconKey      String   @default("Target")
+  createdAt    DateTime @default(now())
+}
+
+// Patrimoine (Stock)
+model Asset {
+  id        String   @id @default(cuid())
+  name      String
+  value     Decimal  @db.Decimal(10, 2)
+  category  String   @default("Autre")
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+}
+
+// Planning (Opérations Futures)
+model FutureOperation {
+  id        String   @id @default(cuid())
+  date      DateTime
+  amount    Decimal  @db.Decimal(10, 2)
+  type      String   // "in" ou "out"
+  label     String
+  received  Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
